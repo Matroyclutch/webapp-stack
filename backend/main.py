@@ -1,5 +1,6 @@
 import os
 import smtplib
+import socket
 from email.message import EmailMessage
 from typing import Any, Optional
 
@@ -23,6 +24,7 @@ SMTP_USER = os.getenv("SMTP_USER", "")
 SMTP_PASS = os.getenv("SMTP_PASS", "")
 SMTP_FROM = os.getenv("SMTP_FROM", SMTP_USER or "no-reply@example.com")
 SMTP_DRY_RUN = os.getenv("SMTP_DRY_RUN", "false").lower() in {"1", "true", "yes"}
+SMTP_TIMEOUT = float(os.getenv("SMTP_TIMEOUT", "20"))
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*")
 
 if CORS_ORIGINS.strip() == "*":
@@ -82,23 +84,24 @@ async def chat(req: ChatRequest) -> dict[str, Any]:
     return {"model": model, "response": data.get("response", "")}
 
 
-def _send_email(subject: str, body: str, attachments: list[UploadFile]) -> None:
+def _send_email(
+    subject: str,
+    body: str,
+    attachments: list[tuple[str, str, bytes]],
+) -> None:
     msg = EmailMessage()
     msg["Subject"] = subject
     msg["From"] = SMTP_FROM
     msg["To"] = MAIL_TO
     msg.set_content(body)
 
-    for f in attachments:
-        data = f.file.read()
+    for filename, content_type, data in attachments:
         if not data:
             continue
-        msg.add_attachment(
-            data,
-            maintype=f.content_type.split("/")[0] if f.content_type else "application",
-            subtype=f.content_type.split("/")[1] if f.content_type and "/" in f.content_type else "octet-stream",
-            filename=f.filename,
-        )
+        maintype, subtype = "application", "octet-stream"
+        if content_type and "/" in content_type:
+            maintype, subtype = content_type.split("/", 1)
+        msg.add_attachment(data, maintype=maintype, subtype=subtype, filename=filename)
 
     if SMTP_DRY_RUN:
         print("SMTP_DRY_RUN enabled. Email not sent.")
@@ -108,10 +111,13 @@ def _send_email(subject: str, body: str, attachments: list[UploadFile]) -> None:
     if not SMTP_USER or not SMTP_PASS:
         raise RuntimeError("SMTP credentials are not set")
 
-    with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
-        server.starttls()
-        server.login(SMTP_USER, SMTP_PASS)
-        server.send_message(msg)
+    try:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=SMTP_TIMEOUT) as server:
+            server.starttls()
+            server.login(SMTP_USER, SMTP_PASS)
+            server.send_message(msg)
+    except (smtplib.SMTPException, socket.timeout) as exc:
+        raise RuntimeError(f"SMTP send failed: {exc}") from exc
 
 
 @app.post("/submit")
@@ -162,6 +168,11 @@ async def submit_arbitration(
     )
 
     subject = f"Arbitration Request - {dealerName} - {vin}"
-    _send_email(subject, body, files)
+    attachments: list[tuple[str, str, bytes]] = []
+    for f in files:
+        data = await f.read()
+        attachments.append((f.filename or "attachment", f.content_type or "", data))
+
+    _send_email(subject, body, attachments)
 
     return {"status": "ok"}

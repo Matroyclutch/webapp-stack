@@ -63,13 +63,18 @@ export default function App() {
     setMessage(null)
 
     try {
+      const controller = new AbortController()
+      const timeoutId = window.setTimeout(() => controller.abort(), 25000)
+
       const fd = new FormData(formRef.current)
       files.forEach((f) => fd.append('files', f.file))
 
       const res = await fetch(submitUrl, {
         method: 'POST',
         body: fd,
+        signal: controller.signal,
       })
+      window.clearTimeout(timeoutId)
 
       if (!res.ok) throw new Error(`Server error: ${res.status}`)
 
@@ -80,13 +85,13 @@ export default function App() {
       formRef.current.reset()
       setFiles([])
     } catch (err) {
-      setMessage({
-        type: 'error',
-        text:
-          err instanceof Error
+      const msg =
+        err instanceof Error && err.name === 'AbortError'
+          ? 'Submission is taking too long. Please try again.'
+          : err instanceof Error
             ? err.message
-            : 'Submission failed. Please try again.',
-      })
+            : 'Submission failed. Please try again.'
+      setMessage({ type: 'error', text: msg })
     } finally {
       setSubmitting(false)
     }
