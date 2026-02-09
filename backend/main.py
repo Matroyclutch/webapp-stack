@@ -8,7 +8,7 @@ import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -21,7 +21,7 @@ MAIL_TO = os.getenv("MAIL_TO", "mat.roy@clutch.ca")
 SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 SMTP_USER = os.getenv("SMTP_USER", "")
-SMTP_PASS = os.getenv("SMTP_PASS", "")
+SMTP_PASS = os.getenv("SMTP_PASS", "").replace(" ", "")
 SMTP_FROM = os.getenv("SMTP_FROM", SMTP_USER or "no-reply@example.com")
 SMTP_DRY_RUN = os.getenv("SMTP_DRY_RUN", "false").lower() in {"1", "true", "yes"}
 SMTP_TIMEOUT = float(os.getenv("SMTP_TIMEOUT", "20"))
@@ -173,6 +173,13 @@ async def submit_arbitration(
         data = await f.read()
         attachments.append((f.filename or "attachment", f.content_type or "", data))
 
-    _send_email(subject, body, attachments)
+    try:
+        _send_email(subject, body, attachments)
+    except Exception as exc:
+        # Return a JSON error so browsers can read it (avoids CORS "Failed to fetch")
+        return JSONResponse(
+            status_code=502,
+            content={"status": "error", "message": str(exc)},
+        )
 
     return {"status": "ok"}

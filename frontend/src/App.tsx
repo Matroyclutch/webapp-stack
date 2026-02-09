@@ -76,7 +76,16 @@ export default function App() {
       })
       window.clearTimeout(timeoutId)
 
-      if (!res.ok) throw new Error(`Server error: ${res.status}`)
+      if (!res.ok) {
+        let detail = `Server error: ${res.status}`
+        try {
+          const data = await res.json()
+          if (data?.message) detail = data.message
+        } catch {
+          // ignore JSON parse errors
+        }
+        throw new Error(detail)
+      }
 
       setMessage({
         type: 'success',
