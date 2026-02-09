@@ -1,4 +1,5 @@
 import os
+import base64
 import smtplib
 import socket
 from email.message import EmailMessage
@@ -25,6 +26,9 @@ SMTP_PASS = os.getenv("SMTP_PASS", "").replace(" ", "")
 SMTP_FROM = os.getenv("SMTP_FROM", SMTP_USER or "no-reply@example.com")
 SMTP_DRY_RUN = os.getenv("SMTP_DRY_RUN", "false").lower() in {"1", "true", "yes"}
 SMTP_TIMEOUT = float(os.getenv("SMTP_TIMEOUT", "20"))
+EMAIL_PROVIDER = os.getenv("EMAIL_PROVIDER", "smtp").lower()
+RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
+RESEND_FROM = os.getenv("RESEND_FROM", SMTP_FROM)
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*")
 
 if CORS_ORIGINS.strip() == "*":
@@ -89,6 +93,10 @@ def _send_email(
     body: str,
     attachments: list[tuple[str, str, bytes]],
 ) -> None:
+    if EMAIL_PROVIDER == "resend":
+        _send_email_resend(subject, body, attachments)
+        return
+
     msg = EmailMessage()
     msg["Subject"] = subject
     msg["From"] = SMTP_FROM
@@ -118,6 +126,44 @@ def _send_email(
             server.send_message(msg)
     except (smtplib.SMTPException, socket.timeout) as exc:
         raise RuntimeError(f"SMTP send failed: {exc}") from exc
+
+
+def _send_email_resend(
+    subject: str,
+    body: str,
+    attachments: list[tuple[str, str, bytes]],
+) -> None:
+    if not RESEND_API_KEY:
+        raise RuntimeError("RESEND_API_KEY is not set")
+
+    files = []
+    for filename, content_type, data in attachments:
+        if not data:
+            continue
+        files.append(
+            {
+                "filename": filename,
+                "content": base64.b64encode(data).decode("utf-8"),
+                "content_type": content_type or "application/octet-stream",
+            }
+        )
+
+    payload = {
+        "from": RESEND_FROM,
+        "to": [MAIL_TO],
+        "subject": subject,
+        "text": body,
+        "attachments": files,
+    }
+
+    with httpx.Client(timeout=20.0) as client:
+        r = client.post(
+            "https://api.resend.com/emails",
+            headers={"Authorization": f"Bearer {RESEND_API_KEY}"},
+            json=payload,
+        )
+        if r.status_code >= 400:
+            raise RuntimeError(f"Resend error {r.status_code}: {r.text}")
 
 
 @app.post("/submit")

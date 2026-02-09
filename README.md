@@ -38,6 +38,10 @@ Edit `webapp-stack/backend/.env` and restart the backend.
    - `SMTP_FROM` = `Clutch Arbitration <your_gmail_address@gmail.com>`
    - `SMTP_DRY_RUN` = `false`
    - `CORS_ORIGINS` = your Cloudflare Pages URL (e.g. `https://your-app.pages.dev`)
+   - If Render blocks SMTP, use Resend instead:
+     - `EMAIL_PROVIDER` = `resend`
+     - `RESEND_API_KEY` = your Resend API key
+     - `RESEND_FROM` = a verified sender (or `onboarding@resend.dev` for testing)
 
 ### Frontend (Cloudflare Pages)
 1. Create a new Pages project from this repo.
