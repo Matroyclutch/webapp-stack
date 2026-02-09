@@ -16,6 +16,7 @@ export default function App() {
   const [message, setMessage] = useState<Message>(null)
   const [submitting, setSubmitting] = useState(false)
   const apiBase = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
+  const submitUrl = apiBase ? `${apiBase}/submit` : '/submit'
 
   const totalSize = useMemo(
     () => files.reduce((sum, f) => sum + f.size, 0),
@@ -60,7 +61,6 @@ export default function App() {
       const fd = new FormData(formRef.current)
       files.forEach((f) => fd.append('files', f.file))
 
-      const submitUrl = apiBase ? `${apiBase}/submit` : '/submit'
       const res = await fetch(submitUrl, {
         method: 'POST',
         body: fd,
@@ -101,7 +101,13 @@ export default function App() {
           </p>
         </header>
 
-        <form ref={formRef} onSubmit={handleSubmit}>
+        <form
+          ref={formRef}
+          onSubmit={handleSubmit}
+          action={submitUrl}
+          method="post"
+          encType="multipart/form-data"
+        >
           <div className="section-header">
             <h2 className="text-2xl font-bold text-clutch-primary">
               1. Claimant/Dealer Information
