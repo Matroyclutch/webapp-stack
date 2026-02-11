@@ -15,12 +15,7 @@ export default function App() {
   const [files, setFiles] = useState<FileItem[]>([])
   const [message, setMessage] = useState<Message>(null)
   const [submitting, setSubmitting] = useState(false)
-  const envApi = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
-  const inferredApi =
-    typeof window !== 'undefined' && window.location.hostname.endsWith('pages.dev')
-      ? 'https://webapp-stack.onrender.com'
-      : ''
-  const apiBase = envApi || inferredApi
+  const apiBase = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
   const submitUrl = apiBase ? `${apiBase}/submit` : '/submit'
 
   const totalSize = useMemo(
